@@ -1,0 +1,15 @@
+node_modules
+.next
+out
+build
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+*.db
+*.db-journal
+src/generated
+.DS_Store
+next-env.d.ts
+var/deployments
+var/runtimes

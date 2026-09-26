@@ -1,0 +1,6 @@
+import { AdminShell } from "@/components/admin-shell";
+import { getAdminContext } from "@/lib/page-auth";
+
+export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+  return <AdminShell>{children}</AdminShell>;
+}

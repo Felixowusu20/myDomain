@@ -1,0 +1,766 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  CUSTOMER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum DomainStatus {
+  ACTIVE
+  PENDING_REGISTRATION
+  PENDING_TRANSFER
+  EXPIRED
+  SUSPENDED
+  LOCKED
+  FAILED
+}
+
+enum HostingStatus {
+  RUNNING
+  PROVISIONING
+  SUSPENDED
+  TERMINATED
+  ERROR
+  OFFLINE
+}
+
+enum ServerStatus {
+  RUNNING
+  WARNING
+  OFFLINE
+  MAINTENANCE
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PAID
+  VOID
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum ProviderType {
+  DOMAIN
+  HOSTING
+  DNS
+  PAYMENT
+  NOTIFICATION
+}
+
+enum ProviderStatus {
+  CONNECTED
+  DISCONNECTED
+  ERROR
+}
+
+enum OtpPurpose {
+  EMAIL_VERIFY
+}
+
+model User {
+  id              String     @id @default(uuid())
+  name            String
+  email           String     @unique
+  passwordHash    String     @default("")
+  role            Role
+  status          UserStatus @default(ACTIVE)
+  phone           String?
+  avatarUrl       String?
+  emailVerifiedAt DateTime?
+  githubId        String?    @unique
+  githubLogin     String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  customer          Customer?
+  adminProfile      Admin?
+  auditLogs         AuditLog[]
+  emailOtps         EmailOtp[]
+  githubConnection  GitHubConnection?
+
+  @@index([email])
+  @@index([role])
+}
+
+model GitHubConnection {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  githubId       String
+  githubLogin    String
+  avatarUrl      String?
+  accessTokenEnc String
+  scope          String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([githubId])
+}
+
+model EmailOtp {
+  id        String     @id @default(cuid())
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purpose   OtpPurpose
+  codeHash  String
+  expiresAt DateTime
+  attempts  Int        @default(0)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@index([userId, purpose])
+  @@index([expiresAt])
+}
+
+model Customer {
+  id               String    @id @default(cuid())
+  userId           String    @unique
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  totpEnabled      Boolean   @default(false)
+  totpSecretEnc    String?
+  totpBackupHashes String?   // JSON array of bcrypt hashes for one-time backup codes
+  totpEnabledAt    DateTime?
+  createdAt        DateTime  @default(now())
+
+  domains       Domain[]
+  hosting       HostingAccount[]
+  orders        Order[]
+  payments      Payment[]
+  invoices      Invoice[]
+  subscriptions Subscription[]
+  renewals      Renewal[]
+  tickets       SupportTicket[]
+  cartItems     CartItem[]
+  notifications Notification[]
+  apiProjects   ApiProject[]
+}
+
+model Admin {
+  id               String    @id @default(cuid())
+  userId           String    @unique
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  totpEnabled      Boolean   @default(false)
+  totpSecretEnc    String?
+  totpBackupHashes String?   // JSON array of bcrypt hashes for one-time backup codes
+  totpEnabledAt    DateTime?
+  createdAt        DateTime  @default(now())
+}
+
+model Domain {
+  id              String       @id @default(cuid())
+  name            String       @unique
+  tld             String
+  customerId      String
+  customer        Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  status          DomainStatus @default(PENDING_REGISTRATION)
+  registeredAt    DateTime?
+  expiresAt       DateTime?
+  autoRenew       Boolean      @default(true)
+  nameserversJson String       @default("[]")
+  locked          Boolean      @default(false)
+  privacyEnabled  Boolean      @default(false)
+  providerId      String
+  provider        Provider     @relation(fields: [providerId], references: [id])
+  providerRef     String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  dnsRecords      DnsRecord[]
+  hostingAccounts HostingAccount[]
+  registrations   DomainRegistration[]
+  contacts        DomainContact[]
+
+  @@index([customerId])
+  @@index([status])
+  @@index([expiresAt])
+}
+
+model DomainRegistration {
+  id          String   @id @default(cuid())
+  domainId    String
+  domain      Domain   @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  orderId     String?
+  years       Int      @default(1)
+  status      String
+  providerRef String?
+  createdAt   DateTime @default(now())
+}
+
+model DomainContact {
+  id        String   @id @default(cuid())
+  domainId  String
+  domain    Domain   @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  type      String
+  firstName String
+  lastName  String
+  email     String
+  phone     String?
+  org       String?
+  createdAt DateTime @default(now())
+}
+
+model DnsRecord {
+  id          String   @id @default(cuid())
+  domainId    String
+  domain      Domain   @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  type        String
+  host        String
+  value       String
+  ttl         Int      @default(3600)
+  priority    Int?
+  providerRef String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([domainId])
+  @@index([providerRef])
+}
+
+model TldPricing {
+  id                 String   @id @default(cuid())
+  tld                String   @unique
+  wholesaleCents     Int
+  originalCents      Int      @default(0)
+  namecomRetailCents Int      @default(0)
+  retailCents        Int
+  renewalCents       Int
+  transferCents      Int
+  restoreCents       Int      @default(0)
+  status             String   @default("Active")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([status])
+}
+
+model HostingPlan {
+  id            String   @id @default(cuid())
+  slug          String   @unique
+  name          String
+  yearlyCents   Int
+  websites      Int
+  storageGb     Int
+  bandwidthGb   Int
+  databases     Int
+  sslIncluded   Boolean  @default(true)
+  description   String
+  sortOrder     Int      @default(0)
+  active        Boolean  @default(true)
+  accounts      HostingAccount[]
+}
+
+model HostingAccount {
+  id             String        @id @default(cuid())
+  customerId     String
+  customer       Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  planId         String
+  plan           HostingPlan   @relation(fields: [planId], references: [id])
+  domainId       String?
+  domain         Domain?       @relation(fields: [domainId], references: [id])
+  serverId       String
+  server         Server        @relation(fields: [serverId], references: [id])
+  status         HostingStatus @default(PROVISIONING)
+  username       String
+  passwordMock   String
+  providerRef    String?
+  isTrial        Boolean       @default(false)
+  trialEndsAt    DateTime?
+  githubRepo     String?
+  githubBranch   String        @default("main")
+  framework      String?
+  rootDirectory  String        @default("")
+  buildCommand   String?
+  startCommand   String?
+  runtimeMode    String        @default("static")
+  runtimePort    Int?
+  runtimeContainer String?
+  envVarsJson    String        @default("[]")
+  previewSlug    String?
+  previewUrl     String?
+  deployStatus   String        @default("IDLE")
+  lastDeployAt   DateTime?
+  lastDeployLog  String?
+  createdAt      DateTime      @default(now())
+  renewsAt       DateTime
+  updatedAt      DateTime      @updatedAt
+  deployments    HostingDeployment[]
+
+  @@index([customerId])
+  @@index([serverId])
+  @@index([status])
+  @@index([isTrial])
+  @@index([trialEndsAt])
+  @@index([previewSlug])
+  @@index([runtimePort])
+}
+
+model HostingDeployment {
+  id           String         @id @default(cuid())
+  hostingId    String
+  hosting      HostingAccount @relation(fields: [hostingId], references: [id], onDelete: Cascade)
+  githubRepo   String
+  githubBranch String
+  status       String
+  previewUrl   String?
+  log          String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([hostingId])
+}
+
+model Server {
+  id              String       @id @default(cuid())
+  name            String       @unique
+  location        String
+  status          ServerStatus @default(RUNNING)
+  ipAddress       String
+  cpuPercent      Int          @default(0)
+  ramPercent      Int          @default(0)
+  diskPercent     Int          @default(0)
+  bandwidthPercent Int         @default(0)
+  uptimePercent   Float        @default(99.9)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  accounts        HostingAccount[]
+}
+
+model CartItem {
+  id          String   @id @default(cuid())
+  customerId  String
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  type        String
+  description String
+  amountCents Int
+  metaJson    String   @default("{}")
+  createdAt   DateTime @default(now())
+}
+
+model Order {
+  id          String      @id @default(cuid())
+  customerId  String
+  customer    Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  status      OrderStatus @default(PENDING)
+  totalCents  Int
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  items       OrderItem[]
+  payment     Payment?
+  invoice     Invoice?
+}
+
+model OrderItem {
+  id          String @id @default(cuid())
+  orderId     String
+  order       Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  type        String
+  description String
+  amountCents Int
+  metaJson    String @default("{}")
+}
+
+model Payment {
+  id          String        @id @default(cuid())
+  customerId  String
+  customer    Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  orderId     String?       @unique
+  order       Order?        @relation(fields: [orderId], references: [id])
+  amountCents Int
+  status      PaymentStatus @default(PENDING)
+  providerRef String?
+  method      String        @default("mock_card")
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([customerId])
+}
+
+model Invoice {
+  id          String        @id @default(cuid())
+  customerId  String
+  customer    Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  orderId     String?       @unique
+  order       Order?        @relation(fields: [orderId], references: [id])
+  number      String        @unique
+  amountCents Int
+  status      InvoiceStatus @default(ISSUED)
+  issuedAt    DateTime      @default(now())
+}
+
+model Subscription {
+  id          String   @id @default(cuid())
+  customerId  String
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  type        String
+  resourceId  String
+  label       String
+  status      String   @default("ACTIVE")
+  renewsAt    DateTime
+  amountCents Int
+  autoRenew   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+}
+
+model Renewal {
+  id           String   @id @default(cuid())
+  customerId   String
+  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  resourceType String
+  resourceId   String
+  label        String
+  dueAt        DateTime
+  amountCents  Int
+  autoRenew    Boolean  @default(true)
+  status       String   @default("UPCOMING")
+  createdAt    DateTime @default(now())
+}
+
+model Provider {
+  id          String         @id @default(cuid())
+  type        ProviderType
+  name        String
+  slug        String         @unique
+  status      ProviderStatus @default(CONNECTED)
+  driver      String         @default("mock")
+  configJson  String         @default("{}")
+  lastChecked DateTime       @default(now())
+  domains     Domain[]
+}
+
+model ProviderAccount {
+  id         String   @id @default(cuid())
+  providerId String
+  label      String
+  createdAt  DateTime @default(now())
+}
+
+model SupportTicket {
+  id         String       @id @default(cuid())
+  customerId String
+  customer   Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  subject    String
+  message    String
+  status     TicketStatus @default(OPEN)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+}
+
+model Notification {
+  id         String   @id @default(cuid())
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  event      String
+  title      String
+  body       String
+  channel    String   @default("in_app")
+  createdAt  DateTime @default(now())
+  readAt     DateTime?
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actor      User?    @relation(fields: [actorId], references: [id])
+  action     String
+  entityType String
+  entityId   String?
+  metadata   String   @default("{}")
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([action])
+}
+
+model BackgroundJob {
+  id          String    @id @default(cuid())
+  name        String
+  status      String    @default("IDLE")
+  lastRunAt   DateTime?
+  lastResult  String?
+  createdAt   DateTime  @default(now())
+}
+
+/// Marketing homepage copy + hero image (editable in admin CMS).
+model CmsHome {
+  id               String   @id @default(cuid())
+  slug             String   @unique @default("home")
+  eyebrow          String   @default("Domains built for entrepreneurs")
+  headline         String   @default("Bet on yourself")
+  headlineAccent   String   @default(".")
+  subcopy          String   @default("You've got the vision. Start with a domain that means business.")
+  searchPlaceholder String  @default("Find my domain.")
+  heroImageUrl     String   @default("")
+  heroImagePublicId String  @default("")
+  heroCaption      String   @default("")
+  heroCaptionHref  String   @default("")
+  statsJson        String   @default("[]")
+  partnersTitle    String   @default("The one-stop shop to launch your business")
+  partnersSubcopy  String   @default("Connect your domain to the tools you already use. Partner integrations coming soon.")
+  updatedAt        DateTime @updatedAt
+  createdAt        DateTime @default(now())
+}
+
+/// Homepage partner / product cards (images managed via admin CMS).
+model CmsPartnerCard {
+  id            String   @id @default(cuid())
+  tag           String
+  title         String
+  description   String
+  imageUrl      String
+  imagePublicId String   @default("")
+  href          String   @default("")
+  comingSoon    Boolean  @default(true)
+  active        Boolean  @default(true)
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([active, sortOrder])
+}
+
+/// Public guide section. Edited from the admin and shown on /docs.
+model CmsDocPage {
+  id        String   @id @default(cuid())
+  product   String   @default("sms-otp")
+  slug      String
+  title     String
+  summary   String   @default("")
+  body      String
+  sortOrder Int      @default(0)
+  published Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([product, slug])
+  @@index([product, published, sortOrder])
+}
+
+enum ApiProjectStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum ApiKeyStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+enum SmsMessageType {
+  SMS
+  OTP
+}
+
+enum SmsMessageStatus {
+  QUEUED
+  PROCESSING
+  SENT
+  DELIVERED
+  FAILED
+  EXPIRED
+  REJECTED
+}
+
+enum SenderIdStatus {
+  ACTIVE
+  DISABLED
+}
+
+/// SMS & OTP project that owns API keys, sender IDs, and message usage. A customer may have many.
+model ApiProject {
+  id            String           @id @default(cuid())
+  customerId    String
+  customer      Customer         @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  name          String
+  status        ApiProjectStatus @default(ACTIVE)
+  defaultSender String           @default("MyDomain")
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  apiKeys      ApiKey[]
+  messages     SmsMessage[]
+  otpRequests  OtpRequest[]
+  senderIds    SenderId[]
+  usageRecords UsageRecord[]
+
+  @@index([customerId])
+  @@index([status])
+}
+
+/// Secret is stored as an HMAC. The raw key is returned only when it is created or rotated.
+model ApiKey {
+  id         String       @id @default(cuid())
+  projectId  String
+  project    ApiProject   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name       String
+  prefix     String       @unique
+  secretHash String
+  scopesJson String       @default("[]")
+  status     ApiKeyStatus @default(ACTIVE)
+  expiresAt  DateTime?
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  messages     SmsMessage[]
+  usageRecords UsageRecord[]
+
+  @@index([projectId])
+  @@index([status])
+}
+
+model SmsMessage {
+  id             String           @id @default(cuid())
+  projectId      String
+  project        ApiProject       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  apiKeyId       String?
+  apiKey         ApiKey?          @relation(fields: [apiKeyId], references: [id])
+  toE164         String
+  bodyEnc        String?
+  bodyPreview    String
+  senderId       String
+  type           SmsMessageType
+  purpose        String?
+  status         SmsMessageStatus @default(QUEUED)
+  route          String           @default("mock")
+  providerRef    String?
+  idempotencyKey String?
+  metadataJson   String           @default("{}")
+  retryCount     Int              @default(0)
+  maxRetries     Int              @default(5)
+  nextAttemptAt  DateTime         @default(now())
+  lockedAt       DateTime?
+  errorCode      String?
+  queuedAt       DateTime         @default(now())
+  sentAt         DateTime?
+  deliveredAt    DateTime?
+  failedAt       DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  attempts     MessageAttempt[]
+  otpRequest   OtpRequest?
+  usageRecords UsageRecord[]
+
+  @@unique([projectId, idempotencyKey])
+  @@index([status, nextAttemptAt])
+  @@index([projectId, createdAt])
+  @@index([toE164])
+}
+
+/// Phone OTP challenge. Only codeHash is stored. The outbound SMS text lives encrypted on SmsMessage until send.
+model OtpRequest {
+  id            String     @id @default(cuid())
+  projectId     String
+  project       ApiProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  phoneE164     String
+  purpose       String
+  codeHash      String
+  smsMessageId  String     @unique
+  smsMessage    SmsMessage @relation(fields: [smsMessageId], references: [id], onDelete: Cascade)
+  expiresAt     DateTime
+  attempts      Int        @default(0)
+  maxAttempts   Int        @default(5)
+  consumedAt    DateTime?
+  invalidatedAt DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  @@index([projectId, phoneE164, purpose])
+  @@index([expiresAt])
+}
+
+model MessageAttempt {
+  id         String     @id @default(cuid())
+  messageId  String
+  message    SmsMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  connector  String
+  status     String
+  errorCode  String?
+  startedAt  DateTime   @default(now())
+  finishedAt DateTime?
+
+  @@index([messageId])
+}
+
+model SenderId {
+  id        String         @id @default(cuid())
+  projectId String
+  project   ApiProject     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  value     String
+  status    SenderIdStatus @default(ACTIVE)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@unique([projectId, value])
+  @@index([projectId])
+}
+
+/// One accepted SMS equals one usage unit. Pricing is intentionally not stored here.
+model UsageRecord {
+  id          String      @id @default(cuid())
+  projectId   String
+  project     ApiProject  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  customerId  String
+  apiKeyId    String?
+  apiKey      ApiKey?     @relation(fields: [apiKeyId], references: [id])
+  messageId   String?
+  message     SmsMessage? @relation(fields: [messageId], references: [id])
+  endpoint    String
+  destination String
+  country     String
+  messageType String
+  units       Int         @default(1)
+  createdAt   DateTime    @default(now())
+
+  @@index([projectId, createdAt])
+  @@index([customerId, createdAt])
+  @@index([apiKeyId])
+  @@index([messageType, createdAt])
+}
+
+model RateLimitBucket {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  count     Int      @default(0)
+  resetAt   DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([resetAt])
+}
