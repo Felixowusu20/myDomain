@@ -47,7 +47,7 @@ export function EnvVarsEditor({
     return true;
   }
 
-  function handleEnvPaste(event: ClipboardEvent<HTMLInputElement | HTMLTextAreaElement>) {
+  function handleEnvPaste(event: ClipboardEvent<HTMLElement>) {
     const text = event.clipboardData.getData("text") || event.clipboardData.getData("text/plain");
     if (!shouldTreatAsEnvPaste(text)) return;
     event.preventDefault();
