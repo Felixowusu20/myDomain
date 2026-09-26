@@ -12,6 +12,7 @@
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
     "test": "tsx --test src/lib/messaging/*.test.ts src/lib/security/*.test.ts",
+    "check:secrets": "sh scripts/check-secret-env.sh",
     "worker:sms": "tsx src/lib/workers/sms.ts",
     "worker:build": "tsx src/lib/workers/container-build.ts"
   },
