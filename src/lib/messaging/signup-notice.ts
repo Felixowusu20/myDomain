@@ -11,7 +11,7 @@ export async function notifyAccountCreated(input: { name: string; phone: string 
   if (!token) return;
   const parsed = parseApiToken(token);
   if (!parsed) {
-    logMessaging("warn", "signup.sms.skipped", { reason: "invalid_platform_key" });
+    logMessaging("signup.sms.skipped", { reason: "invalid_platform_key" });
     return;
   }
   const key = await prisma.apiKey.findUnique({

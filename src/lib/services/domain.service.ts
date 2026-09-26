@@ -378,7 +378,7 @@ export async function connectDomainToVercel(
         action: "domain.connect_vercel_nameservers",
         entityType: "Domain",
         entityId: domain.id,
-        meta: { nameservers: plan.nameservers },
+        metadata: { nameservers: plan.nameservers },
       });
     }
     return { method: "nameservers" as const, domain: serializeDomain(updated), plan };
@@ -431,7 +431,7 @@ export async function connectDomainToVercel(
       action: "domain.connect_vercel_records",
       entityType: "Domain",
       entityId: domain.id,
-      meta: { records: plan.records },
+      metadata: { records: plan.records },
     });
   }
 
