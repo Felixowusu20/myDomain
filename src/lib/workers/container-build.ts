@@ -209,7 +209,7 @@ export async function runContainerBuild(input: { hostingId: string; deploymentId
       await mkdir(RUNTIME_ROOT, { recursive: true });
       await cp(source, runtimeDir, { recursive: true });
 
-      const builtOutput = join(root, outputDirectory);
+      const builtOutput = join(/* turbopackIgnore: true */ root, outputDirectory);
       if (await pathExists(builtOutput) && outputDirectory !== ".") {
         await mkdir(artifact, { recursive: true });
         await cp(builtOutput, join(artifact, outputDirectory), { recursive: true }).catch(() => undefined);
@@ -261,7 +261,7 @@ export async function runContainerBuild(input: { hostingId: string; deploymentId
       return;
     }
 
-    const builtOutput = join(root, outputDirectory);
+    const builtOutput = join(/* turbopackIgnore: true */ root, outputDirectory);
     await cp(builtOutput, artifact, { recursive: true });
     const previewUrl = buildPreviewUrl({ slug, runtimeMode: "static" });
     log += `\nBuild output collected from ${outputDirectory}.`;
