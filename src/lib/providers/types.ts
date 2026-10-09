@@ -98,7 +98,7 @@ export type PaymentResult = {
 };
 
 export interface DomainProvider {
-  searchDomain(query: string, options?: { suggestions?: boolean }): Promise<DomainSearchResult[]>;
+  searchDomain(query: string, options?: { suggestions?: boolean; tld?: string }): Promise<DomainSearchResult[]>;
   checkAvailability(domain: string): Promise<{ available: boolean; reason?: string }>;
   getDomain(domain: string): Promise<DomainInfo | null>;
   registerDomain(input: {

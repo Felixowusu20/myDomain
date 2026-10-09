@@ -11,6 +11,7 @@ import {
   type NamecomTldPrice,
 } from "@/lib/providers/namecom/api";
 import { getAppUrl } from "@/lib/env";
+import { TLD_CATALOG } from "@/lib/tlds";
 
 function usdToCents(value?: number | null) {
   if (typeof value !== "number" || Number.isNaN(value)) return null;
@@ -63,7 +64,12 @@ export async function syncNamecomPricing(options?: { resetMargins?: boolean }) {
   let page = 1;
   let totalCount = 0;
   for (;;) {
-    const data = await namecomTldPrices({ duration: 1, page, perPage: 1000 });
+    const data = await namecomTldPrices({
+      duration: 1,
+      page,
+      perPage: 1000,
+      tlds: TLD_CATALOG.map((item) => item.tld),
+    });
     totalCount = data.totalCount ?? totalCount;
     for (const row of data.pricing ?? []) {
       const mapped = mapTldPrice(row);
@@ -72,7 +78,7 @@ export async function syncNamecomPricing(options?: { resetMargins?: boolean }) {
       if (mapped.tld.includes("mock")) continue;
       remote.set(mapped.tld, mapped);
     }
-    if (!data.nextPage || !(data.pricing ?? []).length) break;
+    if (!data.nextPage || data.nextPage <= page || page >= 3 || !(data.pricing ?? []).length) break;
     page = data.nextPage;
   }
 

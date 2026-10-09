@@ -15,15 +15,15 @@ export async function searchDomains(
   if (sld.length < 2) {
     throw new Error("Enter a name like myshop");
   }
+  const typedTld = extractTldFromQuery(query);
 
   const [owned, providerResults, tlds] = await Promise.all([
     prisma.domain.findMany({ select: { name: true } }),
-    getDomainProvider().searchDomain(sld, options),
+    getDomainProvider().searchDomain(sld, { ...options, tld: typedTld || undefined }),
     prisma.tldPricing.findMany({ where: { status: "Active" } }),
   ]);
   const ownedNames = new Set(owned.map((item) => String(item.name)));
   const priceMap = new Map(tlds.map((tld) => [String(tld.tld), tld]));
-  const typedTld = extractTldFromQuery(query);
   const exactDomain = typedTld ? `${sld}${typedTld}` : "";
 
   const results = providerResults

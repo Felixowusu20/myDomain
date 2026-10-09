@@ -155,7 +155,7 @@ export function DomainSearch({
     if (timer.current) window.clearTimeout(timer.current);
     timer.current = window.setTimeout(() => {
       void runSearch(value, true);
-    }, 450);
+    }, 800);
   }
 
   function normalizeTld(tld: string) {

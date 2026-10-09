@@ -13,6 +13,16 @@ export class NamecomError extends Error {
   }
 }
 
+let namecomPausedUntil = 0;
+
+function pauseAfterRateLimit(resetHeader: string | null) {
+  const resetSeconds = Number(resetHeader);
+  const resetMs =
+    Number.isFinite(resetSeconds) && resetSeconds > 0 ? resetSeconds * 1000 : Date.now() + 60_000;
+  const waitMs = Math.min(Math.max(resetMs - Date.now(), 15_000), 15 * 60_000);
+  namecomPausedUntil = Date.now() + waitMs;
+}
+
 export async function namecomRequest<T>(
   method: string,
   path: string,
@@ -22,6 +32,12 @@ export async function namecomRequest<T>(
   const config = getNamecomConfig();
   if (!config) {
     throw new NamecomError("name.com API credentials are missing.", 503);
+  }
+  if (Date.now() < namecomPausedUntil) {
+    throw new NamecomError(
+      "name.com is limiting domain checks right now. Wait a minute and search again.",
+      429,
+    );
   }
 
   const url = `${config.baseUrl}${config.prefix}${path.startsWith("/") ? path : `/${path}`}`;
@@ -49,6 +65,13 @@ export async function namecomRequest<T>(
     }
   }
   if (!response.ok) {
+    if (response.status === 429) {
+      pauseAfterRateLimit(response.headers.get("x-ratelimit-reset"));
+      throw new NamecomError(
+        "name.com is limiting domain checks right now. Wait a minute and search again.",
+        429,
+      );
+    }
     const message =
       (typeof data.message === "string" && data.message) ||
       `name.com request failed (${response.status})`;

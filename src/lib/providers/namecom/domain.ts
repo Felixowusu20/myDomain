@@ -86,44 +86,51 @@ async function checkAvailability(domainNames: string[]) {
   for (let index = 0; index < domainNames.length; index += 50) {
     chunks.push(domainNames.slice(index, index + 50));
   }
-  const settled = await Promise.all(
-    chunks.map(async (chunk) => {
-      try {
-        return (await namecomCheckAvailability(chunk)).results ?? [];
-      } catch (error) {
-        if (error instanceof NamecomError && (error.status === 400 || error.status === 422)) {
-          return [] as NamecomSearchResult[];
-        }
-        throw error;
-      }
-    }),
-  );
-  return settled.flat();
+  const rows: NamecomSearchResult[] = [];
+  for (const chunk of chunks) {
+    try {
+      rows.push(...((await namecomCheckAvailability(chunk)).results ?? []));
+    } catch (error) {
+      if (error instanceof NamecomError && (error.status === 400 || error.status === 422)) continue;
+      throw error;
+    }
+  }
+  return rows;
 }
 
+const SEARCH_CACHE_MS = 3 * 60_000;
 const searchCache = new Map<string, { at: number; rows: DomainSearchResult[] }>();
 
-export class NamecomDomainProvider implements DomainProvider {
-  async searchDomain(query: string, options?: { suggestions?: boolean }): Promise<DomainSearchResult[]> {
-    const sld = extractSearchName(query);
-    const suggestions = options?.suggestions !== false;
-    const cacheKey = `${sld}:${suggestions ? "full" : "quick"}`;
-    const cached = searchCache.get(cacheKey);
-    if (cached && Date.now() - cached.at < 45_000) return cached.rows;
+function catalogTldFilter(preferred?: string) {
+  const ordered = [...(preferred ? [preferred] : []), ...TLD_CATALOG.map((item) => item.tld)];
+  const unique: string[] = [];
+  for (const tld of ordered) {
+    const bare = tld.replace(/^\./, "").trim();
+    if (!bare || unique.includes(bare)) continue;
+    unique.push(bare);
+    if (unique.length === 50) break;
+  }
+  return unique;
+}
 
-    const names = TLD_CATALOG.map((item) => `${sld}${item.tld}`);
-    const [remote, extra] = await Promise.all([
-      checkAvailability(names),
-      suggestions
-        ? namecomSearch(sld).catch(() => ({ results: [] as NamecomSearchResult[] }))
-        : Promise.resolve({ results: [] as NamecomSearchResult[] }),
-    ]);
-    const byName = new Map(remote.map((item) => [(item.domainName ?? "").toLowerCase(), item]));
-    for (const item of extra.results ?? []) {
-      const name = (item.domainName ?? "").toLowerCase();
-      if (name && !byName.has(name)) byName.set(name, item);
+export class NamecomDomainProvider implements DomainProvider {
+  async searchDomain(query: string, options?: { suggestions?: boolean; tld?: string }): Promise<DomainSearchResult[]> {
+    const sld = extractSearchName(query);
+    const filter = catalogTldFilter(options?.tld);
+    const cacheKey = `${sld}:${filter.join(",")}`;
+    const cached = searchCache.get(cacheKey);
+    if (cached && Date.now() - cached.at < SEARCH_CACHE_MS) return cached.rows;
+
+    let remote: NamecomSearchResult[] = [];
+    try {
+      remote = (await namecomSearch(sld, filter)).results ?? [];
+    } catch (error) {
+      if (error instanceof NamecomError && error.status === 429 && cached) return cached.rows;
+      throw error;
     }
-    const catalog: DomainSearchResult[] = TLD_CATALOG.map((item) => {
+    const byName = new Map(remote.map((item) => [(item.domainName ?? "").toLowerCase(), item]));
+    const checked = new Set(filter.map((tld) => (tld.startsWith(".") ? tld : `.${tld}`)));
+    const catalog: DomainSearchResult[] = TLD_CATALOG.filter((item) => checked.has(item.tld)).map((item) => {
       const domain = `${sld}${item.tld}`;
       const found = byName.get(domain);
       const available = Boolean(found?.purchasable);

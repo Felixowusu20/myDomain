@@ -75,12 +75,12 @@ export function namecomCheckAvailability(domainNames: string[], purchaseType = "
   });
 }
 
-export function namecomSearch(keyword: string, tldFilter?: string[]) {
+export function namecomSearch(keyword: string, tldFilter?: string[], timeout = 8000) {
   return namecomRequest<{ results?: NamecomSearchResult[] }>("POST", "/domains:search", {
     keyword,
     tldFilter,
     purchaseType: "registration",
-    timeout: 2500,
+    timeout,
   });
 }
 
